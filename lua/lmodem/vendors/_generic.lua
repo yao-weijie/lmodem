@@ -1,5 +1,5 @@
 local types = require("lmodem.types")
-local AT = require("lmodem.AT")
+local Serial = require("periphery").Serial
 
 ---@class GenericDevice:Object
 ---@field device       string # default: /dev/ttyUSB2
@@ -16,18 +16,54 @@ local AT = require("lmodem.AT")
 local _GenericDevice = require("lmodem.class"):extend()
 
 function _GenericDevice:new(opts)
-    local device = opts.at_dev or "/dev/ttyUSB2"
-    local baudrate = opts.baudrate or 115200
-    self.AT = AT:new(device, baudrate)
-    self.logger = require("lmodem.log"):new()
+    self.logger = require("lmodem.log"):new("/tmp/lmodem/lmodem.log")
 
-    self.sim1 = {}
-    self.sim2 = {}
-    self.sim_slot = 0
+    self.device = opts.device or "/dev/ttyUSB2"
+    self.baudrate = opts.baudrate or 115200
+end
+--------------------- Setup AT ------------------------------------------------
+---@param cmd string AT cmd
+---@param timeout_ms integer? default 500ms
+---@return boolean
+---@return string
+function _GenericDevice:SendAT(cmd, timeout_ms)
+    local serial = Serial(self.device, self.baudrate)
+
+    -- clear serial buffer
+    repeat
+        serial:read(128, 50)
+    until serial:input_waiting() == 0
+
+    self.logger:info("Send AT command:")
+    serial:write(cmd .. "\r\n") -- real cmd ends with "\r\n"
+    serial:flush()
+
+    serial:poll(timeout_ms or 500) -- wait for data available
+
+    local response = ""
+    repeat
+        response = response .. serial:read(128, 50)
+    until serial:input_waiting() == 0
+    serial:close()
+    os.execute("sleep 0.05")
+
+    local ok = response:match("OK") and true or false
+
+    if ok then
+        self.logger:info(response)
+        response = response:sub(#cmd + 1):gsub("%s*OK%s*$", ""):gsub("^%s*", "")
+        return ok, response
+    else
+        self.logger:error(response)
+        response = response:sub(#cmd + 1):gsub("^%s*", "")
+        return ok, response
+    end
 end
 
+---------------------------- Module Info---------------------------------------
+
 function _GenericDevice:GetManufacturer()
-    local ok, response = self.AT:Send("AT+CGMI")
+    local ok, response = self:SendAT("AT+CGMI")
     if ok then
         self.manufacturer = response
         return self.manufacturer
@@ -35,7 +71,7 @@ function _GenericDevice:GetManufacturer()
 end
 
 function _GenericDevice:GetModel()
-    local ok, response = self.AT:Send("AT+CGSN")
+    local ok, response = self:SendAT("AT+CGMM")
     if ok then
         self.model = response:match("%d+")
         return self.model
@@ -43,7 +79,7 @@ function _GenericDevice:GetModel()
 end
 
 function _GenericDevice:GetRevision()
-    local ok, response = self.AT:Send("AT+CGMR")
+    local ok, response = self:SendAT("AT+CGMR")
     if ok then
         self.revision = response
         return self.revision
@@ -51,7 +87,7 @@ function _GenericDevice:GetRevision()
 end
 
 function _GenericDevice:GetIemi()
-    local ok, response = self.AT:Send("AT+CGMR")
+    local ok, response = self:SendAT("AT+CGSN")
     if ok then
         self.revision = response
         return self.revision
@@ -70,7 +106,7 @@ end
 ---------------------------- SIM Card -----------------------------------------
 
 function _GenericDevice:GetImsi()
-    local ok, response = self.AT:Send("AT+CIMI")
+    local ok, response = self:SendAT("AT+CIMI")
     if ok then
         self.imsi = response:match("%d+")
         return self.imsi
@@ -78,7 +114,7 @@ function _GenericDevice:GetImsi()
 end
 
 function _GenericDevice:GetIccid()
-    local ok, response = self.AT:Send("AT+ICCID")
+    local ok, response = self:SendAT("AT+ICCID")
     if ok then
         self.iccid = response:match("%d+")
         return self.iccid
@@ -107,7 +143,7 @@ end
 ---@return integer signal_dbm >= -113
 ---@return integer err_rate
 function _GenericDevice:GetSignalQuality()
-    local ok, response = self.AT:Send("AT+CSQ")
+    local ok, response = self:SendAT("AT+CSQ")
     local ret = {}
     for num in response:gmatch("%d+") do
         table.insert(ret, tonumber(num, 10))
