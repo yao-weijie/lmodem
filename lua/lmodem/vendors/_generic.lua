@@ -16,10 +16,13 @@ local Serial = require("periphery").Serial
 local _GenericDevice = require("lmodem.class"):extend()
 
 function _GenericDevice:new(opts)
+    opts = opts or {}
     self.logger = require("lmodem.log"):new("/tmp/lmodem/lmodem.log")
 
     self.device = opts.device or "/dev/ttyUSB2"
     self.baudrate = opts.baudrate or 115200
+
+    return self
 end
 --------------------- Setup AT ------------------------------------------------
 ---@param cmd string AT cmd
@@ -34,7 +37,7 @@ function _GenericDevice:SendAT(cmd, timeout_ms)
         serial:read(128, 50)
     until serial:input_waiting() == 0
 
-    self.logger:info("Send AT command:")
+    self.logger:info("Send AT: " .. cmd)
     serial:write(cmd .. "\r\n") -- real cmd ends with "\r\n"
     serial:flush()
 
@@ -45,17 +48,18 @@ function _GenericDevice:SendAT(cmd, timeout_ms)
         response = response .. serial:read(128, 50)
     until serial:input_waiting() == 0
     serial:close()
-    os.execute("sleep 0.05")
 
     local ok = response:match("OK") and true or false
 
     if ok then
-        self.logger:info(response)
+        --- return trimed response
         response = response:sub(#cmd + 1):gsub("%s*OK%s*$", ""):gsub("^%s*", "")
+        self.logger:info(response)
         return ok, response
     else
-        self.logger:error(response)
+        --- return raw response
         response = response:sub(#cmd + 1):gsub("^%s*", "")
+        self.logger:error(response)
         return ok, response
     end
 end
@@ -73,7 +77,7 @@ end
 function _GenericDevice:GetModel()
     local ok, response = self:SendAT("AT+CGMM")
     if ok then
-        self.model = response:match("%d+")
+        self.model = response
         return self.model
     end
 end
