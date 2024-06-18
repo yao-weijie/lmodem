@@ -18,31 +18,24 @@ function _Logger:_write_file(msg)
 end
 
 function _Logger:info(msg)
-    msg = ("[%s] %s: %s"):format(os.date("%Y-%m-%d_%X"), LOG_LEVEL.INFO, msg)
-    self:_write_file(msg)
+    self:log(msg, LOG_LEVEL.INFO)
 end
 
 function _Logger:warn(msg)
-    msg = ("[%s] %s: %s"):format(os.date("%Y-%m-%d_%X"), LOG_LEVEL.WARN, msg)
-    self:_write_file(msg)
+    self:log(msg, LOG_LEVEL.WARN)
 end
 
 function _Logger:error(msg)
-    msg = ("[%s] %s: %s"):format(os.date("%Y-%m-%d_%X"), LOG_LEVEL.ERROR, msg)
-    self:_write_file(msg)
+    self:log(msg, LOG_LEVEL.ERROR)
 end
 
 function _Logger:log(msg, level)
     msg = msg or ""
     level = level or LOG_LEVEL.INFO
 
-    if level == LOG_LEVEL.INFO then
-        self:info(msg)
-    elseif level == LOG_LEVEL.WARN then
-        self:warn(msg)
-    else
-        self:error(msg)
-    end
+    msg = ("[%s] %s: %s"):format(os.date("%Y-%m-%d_%X"), level, msg)
+
+    self:_write_file(msg)
 end
 
 ---@param path string?
