@@ -21,7 +21,21 @@ function _GenericDevice:new(opts)
 
     self.device = opts.device or "/dev/ttyUSB2"
     self.baudrate = opts.baudrate or 115200
+    self.at_echo_enabled = opts.at_echo_enabled or false -- default disabled
 
+    -- test AT
+    local ok, _ = self:SendAT("AT")
+    if ok then
+        self.logger:info("Module setup sucessfully!")
+    else
+        self.logger:error("Module setup failed!")
+    end
+
+    if self.at_echo_enabled then
+        self:SendAT("ATE1") -- enable AT cmd echo
+    else
+        self:SendAT("ATE0") -- enable AT cmd echo
+    end
     return self
 end
 --------------------- Setup AT ------------------------------------------------
@@ -51,14 +65,18 @@ function _GenericDevice:SendAT(cmd, timeout_ms)
 
     local ok = response:match("OK") and true or false
 
+    if self.at_echo_enabled then
+        response = response:gsub(#cmd + 1)
+    end
+
     if ok then
-        --- return trimed response
-        response = response:sub(#cmd + 1):gsub("%s*OK%s*$", ""):gsub("^%s*", "")
+        response = response:gsub("%s*OK%s*$", ""):gsub("^%s*", "")
+        response = response == "" and "OK" or response
         self.logger:info(response)
         return ok, response
     else
         --- return raw response
-        response = response:sub(#cmd + 1):gsub("^%s*", "")
+        response = response:gsub("^%s*", "")
         self.logger:error(response)
         return ok, response
     end
